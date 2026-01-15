@@ -21,46 +21,50 @@ const Home: React.FC = () => {
   const [status, setStatus] = useState('');
 
   const handleSelectVideo = async () => {
-    let tempFileName = '';
-
     try {
       setLoading(true);
       setProgress(0);
 
       // 1. 갤러리에서 동영상 선택
       setStatus('동영상 선택 중...');
-      const pickResult = await FilePicker.pickVideos({ limit: 1, readData: true });
-      if (!pickResult.files?.[0]?.data) return;
+      const pickResult = await FilePicker.pickVideos({ limit: 1, readData: false });
+      const pickedFile = pickResult.files?.[0];
+      if (!pickedFile) return;
 
-      // 2. 선택한 동영상을 임시 파일로 저장
-      setStatus('임시 파일 생성 중...');
-      tempFileName = `source_${Date.now()}.mp4`;
-      const tempFile = await Filesystem.writeFile({
-        path: tempFileName,
-        data: pickResult.files[0].data,
-        directory: Directory.Cache,
-      });
+      // 플랫폼별로 제공되는 동영상 경로(path/uri) 중 사용 가능한 값 선택
+      const pickedPath = (pickedFile as any).path ?? (pickedFile as any).uri;
+      if (!pickedPath) throw new Error('선택한 동영상의 경로(uri/path)를 가져오지 못했습니다.');
 
-      // 3. 동영상 변환
+      // 캐시에 임시 파일 생성
+      const tempFileName = `source_${Date.now()}.mp4`;
+      const tempFileUriResult = await Filesystem.getUri({ path: tempFileName, directory: Directory.Cache });
+      const tempFileUri = tempFileUriResult.uri;
+
+      await FilePicker.copyFile({ from: pickedPath, to: tempFileUri, overwrite: true });
+
+      // 2. 동영상 변환
       setStatus('동영상 변환 중...');
       const listener = await VideoEditor.addListener('transcodeProgress', (info) => {
         if (info.progress) setProgress(info.progress);
       });
 
       const result = await VideoEditor.edit({
-        path: tempFile.uri,
+        path: tempFileUri,
         transcode: { width: 720, height: 480, keepAspectRatio: true, fps: 30 },
         trim: { startsAt: 0, endsAt: 5 * 1000 }, // 0~5초 자르기
       });
 
       listener.remove();
 
-      // 4. 임시 파일 삭제
-      setStatus('임시 파일 삭제 중...');
-      await Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache });
+      // 변환 시작 후에는 캐시 임시 파일 정리
+      try {
+        await Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache });
+      } catch {
+        // ignore
+      }
 
-      // 5. 변환된 동영상을 앨범에 저장
-       setStatus('앨범에 저장 중...');
+      // 3. 변환된 동영상을 앨범에 저장
+      setStatus('앨범에 저장 중...');
       // 'Converted Videos' 앨범 찾기 또는 생성
       const albums = await Media.getAlbums();
       let albumId = albums.albums.find((a) => a.name === 'Converted Videos')?.identifier;
