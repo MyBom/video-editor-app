@@ -2,12 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CAPACITOR_DEBUG</key>
-	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>video-editor-app</string>
+	<string>video-editor-app</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>동영상을 저장하기 위해 사진 라이브러리 접근이 필요합니다</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>편집된 동영상을 저장하기 위해 권한이 필요합니다</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -47,9 +49,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>동영상을 저장하기 위해 사진 라이브러리 접근이 필요합니다</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>편집된 동영상을 저장하기 위해 권한이 필요합니다</string>
 </dict>
 </plist>
