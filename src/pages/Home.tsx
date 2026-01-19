@@ -50,7 +50,7 @@ const Home: React.FC = () => {
 
       const result = await VideoEditor.edit({
         path: tempFileUri,
-        transcode: { width: 720, height: 480, keepAspectRatio: true, fps: 30 },
+        transcode: { height: 480, keepAspectRatio: true, fps: 30 },
         trim: { startsAt: 0, endsAt: 5 * 1000 }, // 0~5초 자르기
       });
 
