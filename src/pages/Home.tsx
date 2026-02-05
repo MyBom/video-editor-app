@@ -15,10 +15,14 @@ import { FilePicker } from '@capawesome/capacitor-file-picker';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { Media } from '@capacitor-community/media';
 
+const CONVERTED_ALBUM_NAME = 'Converted Videos';
+const TRIM_END_MS = 7 * 1000;
+
 const Home: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState('');
+  const [lastDurationMs, setLastDurationMs] = useState<number | null>(null);
 
   const handleSelectVideo = async () => {
     try {
@@ -31,18 +35,16 @@ const Home: React.FC = () => {
       const pickedFile = pickResult.files?.[0];
       if (!pickedFile) return;
 
-      // 플랫폼별로 제공되는 동영상 경로(path/uri) 중 사용 가능한 값 선택
-      const pickedPath = (pickedFile as any).path ?? (pickedFile as any).uri;
+      const fileWithPath = pickedFile as { path?: string; uri?: string };
+      const pickedPath = fileWithPath.path ?? fileWithPath.uri;
       if (!pickedPath) throw new Error('선택한 동영상의 경로(uri/path)를 가져오지 못했습니다.');
 
-      // 캐시에 임시 파일 생성
+      // 2. 캐시에 임시 파일로 복사
       const tempFileName = `source_${Date.now()}.mp4`;
-      const tempFileUriResult = await Filesystem.getUri({ path: tempFileName, directory: Directory.Cache });
-      const tempFileUri = tempFileUriResult.uri;
-
+      const { uri: tempFileUri } = await Filesystem.getUri({ path: tempFileName, directory: Directory.Cache });
       await FilePicker.copyFile({ from: pickedPath, to: tempFileUri, overwrite: true });
 
-      // 2. 동영상 변환
+      // 3. 동영상 변환
       setStatus('동영상 변환 중...');
       const listener = await VideoEditor.addListener('transcodeProgress', (info) => {
         if (info.progress) setProgress(info.progress);
@@ -51,33 +53,34 @@ const Home: React.FC = () => {
       const result = await VideoEditor.edit({
         path: tempFileUri,
         transcode: { height: 480, keepAspectRatio: true, fps: 30 },
-        trim: { startsAt: 0, endsAt: 5 * 1000 }, // 0~5초 자르기
+        trim: { startsAt: 0, endsAt: TRIM_END_MS },
       });
-
       listener.remove();
 
-      // 변환 시작 후에는 캐시 임시 파일 정리
+      const durationMs = (result.file as { duration?: number }).duration;
+      setLastDurationMs(durationMs ?? null);
+
+      // 4. 캐시 임시 파일 정리
       try {
         await Filesystem.deleteFile({ path: tempFileName, directory: Directory.Cache });
       } catch {
-        // ignore
+        /* ignore */
       }
 
-      // 3. 변환된 동영상을 앨범에 저장
+      // 5. 변환된 동영상을 앨범에 저장
       setStatus('앨범에 저장 중...');
-      // 'Converted Videos' 앨범 찾기 또는 생성
-      const albums = await Media.getAlbums();
-      let albumId = albums.albums.find((a) => a.name === 'Converted Videos')?.identifier;
-
+      let albums = await Media.getAlbums();
+      let albumId = albums.albums.find((a) => a.name === CONVERTED_ALBUM_NAME)?.identifier;
       if (!albumId) {
-        await Media.createAlbum({ name: 'Converted Videos' });
-        const updated = await Media.getAlbums();
-        albumId = updated.albums.find((a) => a.name === 'Converted Videos')?.identifier;
+        await Media.createAlbum({ name: CONVERTED_ALBUM_NAME });
+        albums = await Media.getAlbums();
+        albumId = albums.albums.find((a) => a.name === CONVERTED_ALBUM_NAME)?.identifier;
       }
 
       await Media.saveVideo({ path: result.file.path, albumIdentifier: albumId! });
 
-      alert('동영상 변환 및 저장 완료!');
+      const durationStr = durationMs != null ? `${durationMs} ms (${(durationMs / 1000).toFixed(1)}초)` : '—';
+      alert(`동영상 변환 및 저장 완료!\n재생시간: ${durationStr}`);
     } catch (error) {
       console.error('에러:', error);
       const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
@@ -88,6 +91,10 @@ const Home: React.FC = () => {
       setStatus('');
     }
   };
+
+  const durationDisplay = lastDurationMs != null
+    ? `${lastDurationMs} ms (${(lastDurationMs / 1000).toFixed(1)}초)`
+    : null;
 
   return (
     <IonPage>
@@ -101,6 +108,14 @@ const Home: React.FC = () => {
         <IonButton expand="block" onClick={handleSelectVideo} disabled={loading}>
           {loading ? <><IonSpinner /> 처리 중...</> : '동영상 선택 및 변환'}
         </IonButton>
+
+        {durationDisplay && (
+          <IonText color="medium">
+            <p style={{ marginTop: '12px', fontSize: '14px' }}>
+              마지막 변환 결과 재생시간: <strong>{durationDisplay}</strong>
+            </p>
+          </IonText>
+        )}
 
         {loading && (
           <div style={{ marginTop: '20px' }}>
